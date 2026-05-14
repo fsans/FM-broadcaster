@@ -1,5 +1,11 @@
 # FM-broadcaster
 
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-f7df1e?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![FileMaker](https://img.shields.io/badge/FileMaker-Pro%2019+-005577?logo=claris&logoColor=white)](https://www.claris.com/filemaker/)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/fsans/fm-broadcaster)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![onfmready.js](https://img.shields.io/badge/onfmready.js-2.1.11-orange.svg)](https://github.com/stephancasas/onfmready)
+
 A **zero-dependency micro-app** that gives every FileMaker Pro **Web Viewer**
 panel in the same FileMaker client a live, synchronised **key/value store** — with full
 CRUD access from any panel or from FileMaker scripts, instantly, with no server. State
@@ -9,21 +15,33 @@ optionally persists across panel closes via `localStorage`.
 
 ## Table of contents
 
-1. [What it does](#what-it-does)
-2. [How it works](#how-it-works)
-3. [Configuration (URL parameters)](#configuration)
-4. [Persistence (localStorage)](#persistence)
-5. [Payload / message protocol](#payload--message-protocol)
-6. [Transport layer (BroadcastChannel)](#transport-layer)
-7. [FileMaker integration guide](#filemaker-integration-guide)
-   - [Loading the micro-app](#loading-the-micro-app)
-   - [FileMaker → App (calling JS from FM)](#filemaker--app)
-   - [App → FileMaker (the event handler script)](#app--filemaker)
-   - [Token-based async correlation](#token-based-async-correlation)
-8. [Running standalone in a browser](#running-standalone-in-a-browser)
-9. [onfmready.js](#onfmreadyjs)
-10. [Known limitations](#known-limitations)
-11. [Roadmap / ideas](#roadmap--ideas)
+- [FM-broadcaster](#fm-broadcaster)
+  - [Table of contents](#table-of-contents)
+  - [What it does](#what-it-does)
+    - [Typical use case](#typical-use-case)
+  - [How it works](#how-it-works)
+    - [Identity](#identity)
+    - [Key/value store](#keyvalue-store)
+    - [BroadcastChannel bus](#broadcastchannel-bus)
+    - [Late-join sync protocol](#late-join-sync-protocol)
+  - [Configuration](#configuration)
+    - [Examples](#examples)
+  - [Persistence](#persistence)
+  - [Payload / message protocol](#payload--message-protocol)
+    - [FM → App commands (`fmCommand`)](#fm--app-commands-fmcommand)
+    - [App → FM commands (`fm-broadcaster.event_handler`)](#app--fm-commands-fm-broadcasterevent_handler)
+  - [Transport layer](#transport-layer)
+  - [FileMaker integration guide](#filemaker-integration-guide)
+    - [Loading the micro-app](#loading-the-micro-app)
+    - [FileMaker → App](#filemaker--app)
+    - [App → FileMaker](#app--filemaker)
+    - [Token-based async correlation](#token-based-async-correlation)
+  - [Running standalone in a browser](#running-standalone-in-a-browser)
+  - [onfmready.js](#onfmreadyjs)
+    - [Key events it provides](#key-events-it-provides)
+  - [Known limitations](#known-limitations)
+  - [Roadmap / ideas](#roadmap--ideas)
+  - [Credits](#credits)
 
 ---
 
@@ -382,14 +400,17 @@ browser-only development straightforward.
 
 ## onfmready.js
 
+**This project adopts [onfmready.js](https://github.com/stephancasas/onfmready) and strictly respects its original MIT-licensed copy.** The file is included verbatim as a sibling dependency and must be deployed alongside `index.html` without modification.
+
 `index.html` loads **onfmready.js v2.1.11** (MIT — Stephan Casas) as the **first**
 `<script>` tag, served as a sibling file from the same directory. It intercepts all calls
 to `FileMaker.PerformScript()` and queues them until FileMaker injects its JS object,
 eliminating race conditions on macOS and WebDirect.
 
-Deployment must include both files side-by-side at the same URL path.
+**Deployment requirement:** Both files (`index.html` and `onfmready.js`) must be served
+side-by-side at the same URL path. Do not modify `onfmready.js`; consume it as-is.
 
-Key events it provides:
+### Key events it provides
 
 | Event | When | `event.filemaker` |
 |-------|------|-------------------|
@@ -402,8 +423,8 @@ context, and `filemaker-ready` to confirm FM is live and set the status indicato
 Do **not** evaluate `window.FileMaker` directly to detect context — onfmready provides a
 fallback object even outside FM. Use `event.filemaker` from `filemaker-expected` instead.
 
-Source: https://github.com/stephancasas/onfmready.js  
-CDN: `https://cdn.jsdelivr.net/npm/onfmready.js@2.1.11/dist/onfmready.min.js`
+**Source:** https://github.com/stephancasas/onfmready  
+**CDN:** `https://cdn.jsdelivr.net/npm/onfmready.js@2.1.11/dist/onfmready.min.js`
 
 ---
 
@@ -429,3 +450,14 @@ CDN: `https://cdn.jsdelivr.net/npm/onfmready.js@2.1.11/dist/onfmready.min.js`
 - [ ] Structured value support: store arbitrary JSON objects, not just strings
 - [ ] `window.fmBroadcaster` public API for external scripts to call `add`, `patch`, `delete`, `getAll`
 - [ ] Optional cross-host transport (FM Server / WebSocket relay) behind a feature flag
+
+---
+
+## Credits
+
+**Created by** [Francesc Sans](mailto:air.fsans@gmail.com)
+
+**FM-broadcaster** is released under the [MIT License](LICENSE).
+
+Third-party dependencies:
+- [onfmready.js](https://github.com/stephancasas/onfmready) v2.1.11 by Stephan Casas (MIT License)
