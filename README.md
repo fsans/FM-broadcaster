@@ -8,19 +8,27 @@ from any panel or from FileMaker scripts, instantly, with no server.
 
 ## Table of contents
 
-1. [What it does](#what-it-does)
-2. [How it works](#how-it-works)
-3. [Payload / message protocol](#payload--message-protocol)
-4. [Transport layer (BroadcastChannel)](#transport-layer)
-5. [FileMaker integration guide](#filemaker-integration-guide)
-   - [Loading the micro-app](#loading-the-micro-app)
-   - [FileMaker → App (calling JS from FM)](#filemaker--app)
-   - [App → FileMaker (the event handler script)](#app--filemaker)
-   - [Token-based async correlation](#token-based-async-correlation)
-6. [Running standalone in a browser](#running-standalone-in-a-browser)
-7. [onfmready.js](#onfmreadyjs)
-8. [Known limitations](#known-limitations)
-9. [Roadmap / ideas](#roadmap--ideas)
+- [FM-broadcaster](#fm-broadcaster)
+  - [Table of contents](#table-of-contents)
+  - [What it does](#what-it-does)
+  - [How it works](#how-it-works)
+    - [Identity](#identity)
+    - [Key/value store](#keyvalue-store)
+    - [BroadcastChannel bus](#broadcastchannel-bus)
+    - [Late-join sync protocol](#late-join-sync-protocol)
+  - [Payload / message protocol](#payload--message-protocol)
+    - [FM → App commands (`fmCommand`)](#fm--app-commands-fmcommand)
+    - [App → FM commands (`fm-broadcaster.event_handler`)](#app--fm-commands-fm-broadcasterevent_handler)
+  - [Transport layer](#transport-layer)
+  - [FileMaker integration guide](#filemaker-integration-guide)
+    - [Loading the micro-app](#loading-the-micro-app)
+    - [FileMaker → App](#filemaker--app)
+    - [App → FileMaker](#app--filemaker)
+    - [Token-based async correlation](#token-based-async-correlation)
+  - [Running standalone in a browser](#running-standalone-in-a-browser)
+  - [onfmready.js](#onfmreadyjs)
+  - [Known limitations](#known-limitations)
+  - [Roadmap / ideas](#roadmap--ideas)
 
 ---
 
@@ -208,6 +216,15 @@ Perform JavaScript in Web Viewer [
 
 // Delete a key
 { "cmd": "delete", "data": { "key": "userName" },                    "token": "…" }
+
+// Query commands (read-only, no broadcast to peers)
+{ "cmd": "get",    "data": { "key": "userName" },                    "token": "…" }
+{ "cmd": "keys",   "data": {},                                       "token": "…" }
+{ "cmd": "exists", "data": { "key": "userName" },                    "token": "…" }
+{ "cmd": "count",  "data": {},                                       "token": "…" }
+
+// Clear all keys (deletes everything, broadcasts to peers)
+{ "cmd": "clear",  "data": {},                                       "token": "…" }
 ```
 
 ---
@@ -235,6 +252,28 @@ Else If [ $cmd = "onChange" ]
   Set Variable [ $newValue ; Value: JSONGetElement($data ; "newValue") ]
   # … react to the change …
 
+Else If [ $cmd = "onResult" ]
+  # Response to a query command (get, keys, exists, count, clear)
+  Set Variable [ $resultData ; Value: JSONGetElement($data ; "keys") ]
+  If [ not IsEmpty($resultData) ]
+    # keys command result
+    Set Variable [ $keys ; Value: $resultData ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "count")) ]
+    # count command result
+    Set Variable [ $count ; Value: JSONGetElement($data ; "count") ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "cleared")) ]
+    # clear command result
+    Set Variable [ $cleared ; Value: JSONGetElement($data ; "cleared") ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "exists")) ]
+    # exists command result
+    Set Variable [ $exists ; Value: JSONGetElement($data ; "exists") ]
+  Else
+    # get command result
+    Set Variable [ $key   ; Value: JSONGetElement($data ; "key") ]
+    Set Variable [ $value ; Value: JSONGetElement($data ; "value") ]
+    Set Variable [ $found ; Value: JSONGetElement($data ; "found") ]
+  End If
+
 End If
 ```
 
@@ -261,6 +300,24 @@ End If
   },
   "token": "the-same-token-FM-sent-in-the-add-command"
 }
+```
+
+**`onResult` payload examples:**
+```json
+// get
+{ "cmd": "onResult", "data": { "key": "userName", "value": "Alice", "found": true }, "token": "…" }
+
+// keys
+{ "cmd": "onResult", "data": { "keys": ["mode", "userName"] }, "token": "…" }
+
+// exists
+{ "cmd": "onResult", "data": { "key": "userName", "exists": true }, "token": "…" }
+
+// count
+{ "cmd": "onResult", "data": { "count": 3 }, "token": "…" }
+
+// clear
+{ "cmd": "onResult", "data": { "cleared": 5 }, "token": "…" }
 ```
 
 ---
@@ -343,8 +400,9 @@ CDN: `https://cdn.jsdelivr.net/npm/onfmready.js@2.1.11/dist/onfmready.min.js`
 
 ## Roadmap / ideas
 
-- [ ] Accept `?channel=` and `?script=` URL parameters to configure channel name and FM script name without editing the file
-- [ ] Optional `localStorage` persistence so state survives a panel reload (not a full FM quit)
+- [x] Accept `?channel=` and `?script=` URL parameters to configure channel name and FM script name without editing the file
+- [x] Optional `localStorage` persistence so state survives a panel reload (not a full FM quit)
+- [x] Query API for FileMaker: `get`, `keys`, `exists`, `count`, `clear` commands with `onResult` responses
 - [ ] Heartbeat / presence: detect and remove peers that closed without broadcasting a departure
 - [ ] Structured value support: store arbitrary JSON objects, not just strings
 - [ ] Conflict resolution hint: last-write-wins timestamp attached to each key

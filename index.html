@@ -475,6 +475,41 @@ window.fmCommand = function(payloadStr) {
       notifyFmChange(key, oldValue, null, token);
       break;
     }
+    case 'get': {
+      const { key } = data;
+      if (!key) { callFM('error', { message: 'fmCommand: missing key' }); return; }
+      const found = store.hasOwnProperty(key);
+      callFM('onResult', { key, value: found ? store[key] : null, found }, token);
+      break;
+    }
+    case 'keys': {
+      const keys = Object.keys(store).sort();
+      callFM('onResult', { keys }, token);
+      break;
+    }
+    case 'exists': {
+      const { key } = data;
+      if (!key) { callFM('error', { message: 'fmCommand: missing key' }); return; }
+      callFM('onResult', { key, exists: store.hasOwnProperty(key) }, token);
+      break;
+    }
+    case 'count': {
+      callFM('onResult', { count: Object.keys(store).length }, token);
+      break;
+    }
+    case 'clear': {
+      const keysToClear = Object.keys(store);
+      let clearedCount = 0;
+      keysToClear.forEach(function(key) {
+        const { oldValue } = applyMutation('delete', key, null, token, true);
+        if (oldValue !== null) {
+          clearedCount++;
+          notifyFmChange(key, oldValue, null, token);
+        }
+      });
+      callFM('onResult', { cleared: clearedCount }, token);
+      break;
+    }
     default:
       callFM('error', { message: 'fmCommand: unknown cmd "' + cmd + '"' });
   }
@@ -600,6 +635,15 @@ channel.onmessage = function(e) {
       const { key } = msg.data;
       const { oldValue, changed } = applyMutation('delete', key, null, msg.token, false, msg.data.meta);
       if (changed) notifyFmChange(key, oldValue, null, msg.token);
+      break;
+    }
+    case 'clear': {
+      rememberPeer(msg.origin, msg.data.color);
+      const keysToClear = Object.keys(store);
+      keysToClear.forEach(function(key) {
+        const { oldValue, changed } = applyMutation('delete', key, null, msg.token, false, msg.data.meta);
+        if (changed) notifyFmChange(key, oldValue, null, msg.token);
+      });
       break;
     }
     default:
