@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BroadcastChannel Shared Array</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+    h2 { margin-bottom: 10px; }
+    .row { margin-bottom: 10px; }
+    input {
+      padding: 6px;
+      width: 60%;
+    }
+    button {
+      padding: 6px 10px;
+      margin-left: 5px;
+      cursor: pointer;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li {
+      cursor: pointer;
+      margin: 4px 0;
+    }
+    .meta {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Shared Live Array</h2>
+  <div class="meta">
+    Open multiple tabs → all stay in sync (pure client-side)
+  </div>
+
+  <div class="row">
+    <input id="input" placeholder="Add item..." />
+    <button onclick="addItem()">Add</button>
+    <button onclick="reset()">Reset</button>
+  </div>
+
+  <ul id="list"></ul>
+
+  <script>
+    // ---- Identity ----
+    const TAB_ID = crypto.randomUUID();
+
+    // ---- State ----
+    let items = [];
+
+    // ---- Channel ----
+    const channel = new BroadcastChannel("shared-array-demo");
+
+    // ---- Render ----
+    function render() {
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      items.forEach((item, index) => {
+        const li = document.createElement("li");
+        li.textContent = item + "  (click to delete)";
+        li.onclick = () => removeItem(index);
+        list.appendChild(li);
+      });
+    }
+
+    // ---- Event reducer ----
+    function applyEvent(event) {
+      switch (event.type) {
+        case "add":
+          items.push(event.payload);
+          break;
+
+        case "remove":
+          items.splice(event.payload, 1);
+          break;
+
+        case "reset":
+          items = [];
+          break;
+
+        case "sync_full":
+          items = event.payload;
+          break;
+      }
+      render();
+    }
+
+    // ---- Actions ----
+    function addItem() {
+      const input = document.getElementById("input");
+      const value = input.value.trim();
+      if (!value) return;
+
+      const event = {
+        type: "add",
+        payload: value,
+        origin: TAB_ID
+      };
+
+      applyEvent(event);
+      channel.postMessage(event);
+      input.value = "";
+    }
+
+    function removeItem(index) {
+      const event = {
+        type: "remove",
+        payload: index,
+        origin: TAB_ID
+      };
+
+      applyEvent(event);
+      channel.postMessage(event);
+    }
+
+    function reset() {
+      const event = {
+        type: "reset",
+        origin: TAB_ID
+      };
+
+      applyEvent(event);
+      channel.postMessage(event);
+    }
+
+    // ---- Sync protocol (late join fix) ----
+    function requestSync() {
+      channel.postMessage({
+        type: "request_sync",
+        origin: TAB_ID
+      });
+    }
+
+    function sendFullState(target) {
+      channel.postMessage({
+        type: "sync_full",
+        payload: items,
+        origin: TAB_ID,
+        target
+      });
+    }
+
+    // ---- Listener ----
+    channel.onmessage = (e) => {
+      const event = e.data;
+
+      // Ignore own messages
+      if (event.origin === TAB_ID) return;
+
+      // Directed message (sync reply)
+      if (event.target && event.target !== TAB_ID) return;
+
+      if (event.type === "request_sync") {
+        sendFullState(event.origin);
+        return;
+      }
+
+      applyEvent(event);
+    };
+
+    // ---- Init ----
+    render();
+
+    // Ask others for state when opening a new tab
+    requestSync();
+  </script>
+
+</body>
+</html>
