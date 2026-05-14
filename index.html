@@ -230,6 +230,40 @@ const INSTANCE_COLOR = COLORS[Math.floor(Math.random() * COLORS.length)];
 const SHORT_ID = INSTANCE_ID.slice(-6);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFIG  — defaults + URL-parameter overrides
+//
+// Every config knob can be overridden via the WebViewer URL, e.g.:
+//   index.html?channel=my-app&storageKey=my-app:state&fmScript=my.handler&persist=0
+//
+// Booleans accept: 1 / 0 / true / false / yes / no  (case-insensitive)
+// ─────────────────────────────────────────────────────────────────────────────
+const URL_PARAMS = (function() {
+  try { return new URLSearchParams(window.location.search); }
+  catch (e) { return new URLSearchParams(''); }
+})();
+
+function paramStr(name, fallback) {
+  const v = URL_PARAMS.get(name);
+  return (v == null || v === '') ? fallback : v;
+}
+
+function paramBool(name, fallback) {
+  const v = URL_PARAMS.get(name);
+  if (v == null) return fallback;
+  const s = String(v).trim().toLowerCase();
+  if (s === '' )                                 return fallback;
+  if (s === '0' || s === 'false' || s === 'no')  return false;
+  if (s === '1' || s === 'true'  || s === 'yes') return true;
+  return fallback;
+}
+
+// Edit these defaults to change behaviour without touching URL params.
+const CHANNEL_NAME = paramStr ('channel',    'fm-broadcaster');
+const STORAGE_KEY  = paramStr ('storageKey', 'fm-broadcaster:state');
+const FM_SCRIPT    = paramStr ('fmScript',   'fm-broadcaster.event_handler');
+const PERSIST      = paramBool('persist',    true);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STATE  — key/value store  { [key: string]: string }
 // ─────────────────────────────────────────────────────────────────────────────
 let store = {};
@@ -238,12 +272,11 @@ let peers = {};   // { [instanceId]: color }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PERSISTENCE  — localStorage durability layer (per-origin)
-// Survives "all WebViewers closed" within one FileMaker client and is shared
-// across FM files that load this page from the same URL.
+// Enabled by default. Disable by setting PERSIST=false (above) or via URL
+// (?persist=0). When disabled, loadPersisted() and persist() are no-ops.
 // ─────────────────────────────────────────────────────────────────────────────
-const STORAGE_KEY = 'fm-broadcaster:state';
-
 function loadPersisted() {
+  if (!PERSIST) return;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
@@ -256,6 +289,7 @@ function loadPersisted() {
 }
 
 function persist() {
+  if (!PERSIST) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ store: store, meta: storeMeta }));
   } catch (e) { /* quota / disabled; ignore */ }
@@ -264,7 +298,6 @@ function persist() {
 // ─────────────────────────────────────────────────────────────────────────────
 // BROADCAST CHANNEL
 // ─────────────────────────────────────────────────────────────────────────────
-const CHANNEL_NAME = 'fm-broadcaster';
 const channel = new BroadcastChannel(CHANNEL_NAME);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -511,8 +544,6 @@ window.fmCommand = function(payloadStr) {
 // APP → FM CALLS
 // All outbound calls go through callFM() so there is one choke-point.
 // ─────────────────────────────────────────────────────────────────────────────
-const FM_SCRIPT = 'fm-broadcaster.event_handler';
-
 function callFM(cmd, data, token) {
   const payload = mkFmPayload(cmd, data, token);
   FileMaker.PerformScript(FM_SCRIPT, payload);
