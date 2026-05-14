@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FM Broadcaster</title>
+
+  <!-- onfmready.js — must be the first script loaded -->
+  <script src="onfmready.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      background: #f5f5f5;
+      color: #222;
+    }
+    #app {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ── header bar ─────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .instance-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 12px;
+      letter-spacing: .02em;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #aaa;
+      flex-shrink: 0;
+    }
+    .status-dot.ready  { background: #22c55e; }
+    .status-dot.synced { background: #3b82f6; }
+    .status-label {
+      font-size: 12px;
+      color: #666;
+    }
+    .peers-row {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .peer-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      border: 1px solid #ddd;
+    }
+
+    /* ── input row ──────────────────────────────────────────── */
+    .input-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .input-row input[type="text"] {
+      flex: 1;
+      padding: 7px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .input-row input[type="text"]:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .btn {
+      padding: 7px 13px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger  { background: #fee2e2; color: #b91c1c; }
+    .btn-danger:hover { background: #fecaca; }
+
+    /* ── store table ─────────────────────────────────────────── */
+    .store-wrap {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .store-empty {
+      padding: 24px;
+      text-align: center;
+      color: #aaa;
+      font-size: 13px;
+    }
+    .store-row {
+      display: grid;
+      grid-template-columns: 1fr 2fr auto;
+      align-items: center;
+      gap: 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .store-row:last-child { border-bottom: none; }
+    .store-key, .store-val {
+      padding: 9px 12px;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .store-key {
+      font-weight: 600;
+      color: #475569;
+      border-right: 1px solid #f1f5f9;
+    }
+    .store-val { color: #1e293b; }
+    .store-actions {
+      display: flex;
+      gap: 4px;
+      padding: 0 8px;
+    }
+    .btn-icon {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 4px;
+      color: #94a3b8;
+    }
+    .btn-icon:hover { color: #ef4444; background: #fee2e2; }
+    .btn-icon.edit:hover { color: #3b82f6; background: #eff6ff; }
+
+    /* ── inline edit overlay ─────────────────────────────────── */
+    .edit-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.25);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .edit-overlay.open { display: flex; }
+    .edit-box {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.15);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .edit-box label { font-size: 13px; font-weight: 600; color: #475569; }
+    .edit-box input {
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .edit-box input:focus { outline: none; border-color: #3b82f6; }
+    .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- header -->
+  <div class="header">
+    <span id="instance-badge" class="instance-badge">—</span>
+    <span id="status-dot" class="status-dot"></span>
+    <span id="status-label" class="status-label">initialising…</span>
+  </div>
+
+  <!-- peers -->
+  <div class="peers-row" id="peers-row">
+    <span>peers:</span>
+    <span id="no-peers-label" style="color:#bbb">none yet</span>
+  </div>
+
+  <!-- add row -->
+  <div class="input-row">
+    <input type="text" id="key-input"   placeholder="key" style="max-width:140px;" />
+    <input type="text" id="value-input" placeholder="value" />
+    <button class="btn btn-primary" onclick="uiAdd()">Add / Set</button>
+  </div>
+
+  <!-- store table -->
+  <div class="store-wrap" id="store-wrap">
+    <div class="store-empty" id="store-empty">store is empty</div>
+  </div>
+</div>
+
+<!-- inline edit modal -->
+<div class="edit-overlay" id="edit-overlay">
+  <div class="edit-box">
+    <label id="edit-key-label">key</label>
+    <input type="text" id="edit-value-input" placeholder="new value" />
+    <div class="edit-actions">
+      <button class="btn" style="background:#f1f5f9;color:#475569" onclick="closeEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// IDENTITY
+// ─────────────────────────────────────────────────────────────────────────────
+const INSTANCE_ID = crypto.randomUUID();
+const COLORS = ['#185FA5','#1D9E75','#BA7517','#993556','#533AB7','#993C1D','#3B6D11'];
+const INSTANCE_COLOR = COLORS[Math.floor(Math.random() * COLORS.length)];
+
+// Short label shown in the badge (last 6 chars of UUID)
+const SHORT_ID = INSTANCE_ID.slice(-6);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE  — key/value store  { [key: string]: string }
+// ─────────────────────────────────────────────────────────────────────────────
+let store = {};
+let storeMeta = {};
+let peers = {};   // { [instanceId]: color }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BROADCAST CHANNEL
+// ─────────────────────────────────────────────────────────────────────────────
+const CHANNEL_NAME = 'fm-broadcaster';
+const channel = new BroadcastChannel(CHANNEL_NAME);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYLOAD HELPERS
+// Build and parse the standard {cmd, data, token} envelope
+// ─────────────────────────────────────────────────────────────────────────────
+function mkToken() {
+  return crypto.randomUUID();
+}
+
+/**
+ * Build an internal bus message envelope.
+ * These are slightly different from FM payloads — they also carry
+ * origin/target routing info for the BroadcastChannel protocol.
+ */
+function mkMsg(cmd, data, target, token) {
+  const msg = { cmd, data: data || {}, token: token || mkToken(), origin: INSTANCE_ID };
+  if (target) msg.target = target;
+  return msg;
+}
+
+/**
+ * Build the standard FM-facing payload {cmd, data, token}.
+ */
+function mkFmPayload(cmd, data, token) {
+  return JSON.stringify({ cmd, data: data || {}, token: token || mkToken() });
+}
+
+let mutationSeq = 0;
+
+function nextMeta(deleted) {
+  mutationSeq++;
+  return { ts: Date.now() * 1000 + mutationSeq, origin: INSTANCE_ID, deleted: !!deleted };
+}
+
+function isNewerMeta(incoming, current) {
+  if (!current) return true;
+  if (incoming.ts !== current.ts) return incoming.ts > current.ts;
+  return String(incoming.origin || '') > String(current.origin || '');
+}
+
+function cloneStoreMeta() {
+  return JSON.parse(JSON.stringify(storeMeta));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+function render() {
+  const wrap = document.getElementById('store-wrap');
+  const empty = document.getElementById('store-empty');
+
+  // Remove only data rows — leave the empty-state div in place
+  wrap.querySelectorAll('.store-row').forEach(function(r) { r.remove(); });
+
+  const keys = Object.keys(store);
+  empty.style.display = keys.length === 0 ? '' : 'none';
+  if (keys.length === 0) return;
+
+  keys.sort().forEach(function(key) {
+    const row = document.createElement('div');
+    row.className = 'store-row';
+
+    const keyEl = document.createElement('div');
+    keyEl.className = 'store-key';
+    keyEl.textContent = key;
+
+    const valEl = document.createElement('div');
+    valEl.className = 'store-val';
+    valEl.textContent = store[key];
+
+    const actions = document.createElement('div');
+    actions.className = 'store-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn-icon edit';
+    editBtn.title = 'Edit';
+    editBtn.textContent = '✎';
+    editBtn.onclick = function() { openEdit(key); };
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-icon';
+    delBtn.title = 'Delete';
+    delBtn.textContent = '✕';
+    delBtn.onclick = function() { uiDelete(key); };
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    row.appendChild(keyEl);
+    row.appendChild(valEl);
+    row.appendChild(actions);
+    wrap.appendChild(row);
+  });
+}
+
+function renderPeers() {
+  const row = document.getElementById('peers-row');
+  row.querySelectorAll('.peer-pill').forEach(function(p) { p.remove(); });
+  let noLabel = document.getElementById('no-peers-label');
+  const ids = Object.keys(peers);
+  setStatus(ids.length === 0 ? 'ready' : 'synced');
+  if (ids.length === 0) {
+    if (!noLabel) {
+      noLabel = document.createElement('span');
+      noLabel.id = 'no-peers-label';
+      noLabel.style.color = '#bbb';
+      noLabel.textContent = 'none yet';
+      row.appendChild(noLabel);
+    } else if (!noLabel.parentNode) {
+      row.appendChild(noLabel);
+    }
+  } else {
+    if (noLabel && noLabel.parentNode) noLabel.parentNode.removeChild(noLabel);
+    ids.forEach(function(id) {
+      const pill = document.createElement('span');
+      pill.className = 'peer-pill';
+      pill.textContent = id.slice(-6);
+      pill.style.color = peers[id];
+      pill.style.borderColor = peers[id] + '88';
+      row.appendChild(pill);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STORE MUTATIONS — single source of truth; always call these, not raw edits
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Apply a mutation locally and optionally broadcast it.
+ * @param {string}  cmd        'add' | 'delete' | 'patch'
+ * @param {string}  key
+ * @param {*}       value      string for add/patch, null for delete
+ * @param {string}  token      pass-through token (for FM correlation)
+ * @param {boolean} broadcast  whether to send on the channel
+ * @returns {{ oldValue, newValue }}
+ */
+function applyMutation(cmd, key, value, token, broadcast, meta) {
+  const oldValue = store.hasOwnProperty(key) ? store[key] : null;
+  let newValue = null;
+  const mutationMeta = meta || nextMeta(cmd === 'delete');
+  const currentMeta = storeMeta[key] || null;
+
+  if (meta && !isNewerMeta(mutationMeta, currentMeta)) {
+    return { oldValue, newValue: oldValue, changed: false };
+  }
+
+  if (cmd === 'add' || cmd === 'patch') {
+    store[key] = value;
+    storeMeta[key] = mutationMeta;
+    newValue = value;
+  } else if (cmd === 'delete') {
+    delete store[key];
+    storeMeta[key] = mutationMeta;
+    newValue = null;
+  }
+
+  render();
+
+  if (broadcast) {
+    channel.postMessage(mkMsg(cmd, { key, value, meta: mutationMeta, color: INSTANCE_COLOR }, null, token));
+  }
+
+  return { oldValue, newValue, changed: oldValue !== newValue };
+}
+
+function mergeFullState(data) {
+  const incomingStore = (data && data.store) || {};
+  const incomingMeta  = (data && data.meta)  || {};
+  const incomingKeys  = Object.keys(incomingStore);
+
+  console.log('[mergeFullState before]', SHORT_ID, JSON.parse(JSON.stringify(store)));
+  console.log('[mergeFullState incoming]', SHORT_ID, { keys: incomingKeys, hasMeta: Object.keys(incomingMeta).length > 0 });
+
+  // Fast path: if our local store is empty, replace it wholesale.
+  // This avoids any meta/freshness comparison preventing the initial fill,
+  // which is the case for every late joiner (instance 2, 3, 4, ...).
+  const localKeys = Object.keys(store);
+  if (localKeys.length === 0 && incomingKeys.length > 0) {
+    incomingKeys.forEach(function(key) {
+      store[key] = incomingStore[key];
+      storeMeta[key] = incomingMeta[key] || nextMeta(false);
+    });
+    render();
+    console.log('[mergeFullState after-replace]', SHORT_ID, JSON.parse(JSON.stringify(store)));
+    return true;
+  }
+
+  // Otherwise: per-key meta-based merge for conflict resolution.
+  let changed = false;
+  const keys = {};
+  incomingKeys.forEach(function(key) { keys[key] = true; });
+  Object.keys(incomingMeta).forEach(function(key) { keys[key] = true; });
+
+  Object.keys(keys).forEach(function(key) {
+    const meta = incomingMeta[key] || { ts: 0, origin: '', deleted: false };
+    const cmd = meta.deleted ? 'delete' : (store.hasOwnProperty(key) ? 'patch' : 'add');
+    const value = meta.deleted ? null : incomingStore[key];
+    const result = applyMutation(cmd, key, value, null, false, meta);
+    if (result.changed) changed = true;
+  });
+
+  if (changed) render();
+  console.log('[mergeFullState after-merge]', SHORT_ID, JSON.parse(JSON.stringify(store)), 'changed=', changed);
+  return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FM → APP COMMANDS
+// Called by FileMaker via  Perform JavaScript in Web Viewer
+//   Function: fmCommand
+//   Parameter: JSON string  { cmd, data, token }
+// ─────────────────────────────────────────────────────────────────────────────
+window.fmCommand = function(payloadStr) {
+  let payload;
+  try {
+    payload = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
+  } catch (e) {
+    callFM('error', { message: 'fmCommand: bad JSON — ' + e.message });
+    return;
+  }
+
+  const { cmd, data, token } = payload;
+
+  switch (cmd) {
+    case 'add':
+    case 'patch': {
+      const { key, value } = data;
+      if (!key) { callFM('error', { message: 'fmCommand: missing key' }); return; }
+      const { oldValue, newValue } = applyMutation(cmd, key, value, token, true);
+      notifyFmChange(key, oldValue, newValue, token);
+      break;
+    }
+    case 'delete': {
+      const { key } = data;
+      if (!key) { callFM('error', { message: 'fmCommand: missing key' }); return; }
+      const { oldValue } = applyMutation('delete', key, null, token, true);
+      notifyFmChange(key, oldValue, null, token);
+      break;
+    }
+    default:
+      callFM('error', { message: 'fmCommand: unknown cmd "' + cmd + '"' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP → FM CALLS
+// All outbound calls go through callFM() so there is one choke-point.
+// ─────────────────────────────────────────────────────────────────────────────
+const FM_SCRIPT = 'fm-broadcaster.event_handler';
+
+function callFM(cmd, data, token) {
+  const payload = mkFmPayload(cmd, data, token);
+  FileMaker.PerformScript(FM_SCRIPT, payload);
+}
+
+/** Called once onfmready confirms FileMaker is present and has injected. */
+function notifyFmLoaded() {
+  callFM('loaded', { instanceId: INSTANCE_ID, store: store }, mkToken());
+}
+
+/** Called after any store mutation, regardless of who originated it. */
+function notifyFmChange(key, oldValue, newValue, token) {
+  callFM('onChange', { key, oldValue, newValue }, token || mkToken());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BROADCAST CHANNEL PROTOCOL
+// Messages: { cmd, data, token, origin, [target] }
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Whether this instance has already received a sync_full from a peer.
+let synced = false;
+let syncStarted = false;
+
+/**
+ * Broadcast request_sync repeatedly. This handles races where WebViewer
+ * instances are still initializing when the first request fires.
+ */
+const MAX_SYNC_ATTEMPTS = 20;
+const SYNC_RETRY_MS     = 250;
+
+function rememberPeer(id, color) {
+  if (!id || id === INSTANCE_ID) return;
+  peers[id] = color || peers[id] || '#888888';
+  renderPeers();
+}
+
+function requestSync() {
+  if (syncStarted) return;
+  syncStarted = true;
+  let attempts = 0;
+  function attempt() {
+    channel.postMessage(mkMsg('hello', { color: INSTANCE_COLOR }));
+    channel.postMessage(mkMsg('request_sync', { color: INSTANCE_COLOR }));
+    attempts++;
+    if (attempts < MAX_SYNC_ATTEMPTS) {
+      setTimeout(attempt, SYNC_RETRY_MS);
+    }
+  }
+  attempt();
+}
+
+/** Respond to a specific joiner with full state snapshot. */
+function sendFullState(targetId) {
+  channel.postMessage(
+    mkMsg('sync_full', { store: store, meta: cloneStoreMeta(), color: INSTANCE_COLOR }, targetId)
+  );
+}
+
+function publishState() {
+  channel.postMessage(mkMsg('hello', { color: INSTANCE_COLOR }));
+  channel.postMessage(mkMsg('sync_full', { store: store, meta: cloneStoreMeta(), color: INSTANCE_COLOR }));
+}
+
+let loadedNotified = false;
+
+function notifyFmLoadedOnce() {
+  if (loadedNotified) return;
+  loadedNotified = true;
+  notifyFmLoaded();
+}
+
+channel.onmessage = function(e) {
+  const msg = e.data;
+  if (!msg || !msg.cmd) return;
+
+  // Ignore own messages
+  if (msg.origin === INSTANCE_ID) return;
+
+  // Targeted messages: ignore if we're not the target
+  if (msg.target && msg.target !== INSTANCE_ID) return;
+
+  console.log('[bus recv]', SHORT_ID, msg.cmd, {
+    origin: msg.origin && msg.origin.slice(-6),
+    target: msg.target && msg.target.slice(-6),
+    storeKeys: msg.data && msg.data.store ? Object.keys(msg.data.store) : null
+  });
+
+  switch (msg.cmd) {
+    case 'hello': {
+      rememberPeer(msg.origin, msg.data.color);
+      sendFullState(msg.origin);
+      break;
+    }
+    case 'request_sync': {
+      rememberPeer(msg.origin, msg.data.color);
+      channel.postMessage(mkMsg('hello', { color: INSTANCE_COLOR }, msg.origin));
+      sendFullState(msg.origin);
+      break;
+    }
+    case 'sync_full': {
+      synced = true;
+      rememberPeer(msg.origin, msg.data.color);
+      mergeFullState(msg.data);
+      notifyFmLoadedOnce();
+      break;
+    }
+    case 'add':
+    case 'patch': {
+      rememberPeer(msg.origin, msg.data.color);
+      const { key, value } = msg.data;
+      const { oldValue, newValue, changed } = applyMutation(msg.cmd, key, value, msg.token, false, msg.data.meta);
+      if (changed) notifyFmChange(key, oldValue, newValue, msg.token);
+      break;
+    }
+    case 'delete': {
+      rememberPeer(msg.origin, msg.data.color);
+      const { key } = msg.data;
+      const { oldValue, changed } = applyMutation('delete', key, null, msg.token, false, msg.data.meta);
+      if (changed) notifyFmChange(key, oldValue, null, msg.token);
+      break;
+    }
+    default:
+      callFM('error', { message: 'unknown bus cmd: ' + msg.cmd });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI ACTIONS (called from markup onclick / modal)
+// ─────────────────────────────────────────────────────────────────────────────
+function uiAdd() {
+  const key   = document.getElementById('key-input').value.trim();
+  const value = document.getElementById('value-input').value.trim();
+  if (!key) { callFM('error', { message: 'uiAdd: key is required' }); return; }
+
+  const cmd = store.hasOwnProperty(key) ? 'patch' : 'add';
+  const { oldValue, newValue } = applyMutation(cmd, key, value, null, true);
+  notifyFmChange(key, oldValue, newValue, null);
+
+  document.getElementById('key-input').value = '';
+  document.getElementById('value-input').value = '';
+}
+
+function uiDelete(key) {
+  const { oldValue } = applyMutation('delete', key, null, null, true);
+  notifyFmChange(key, oldValue, null, null);
+}
+
+// ── inline edit modal ──────────────────────────────────────────────────────
+let _editKey = null;
+
+function openEdit(key) {
+  _editKey = key;
+  document.getElementById('edit-key-label').textContent = 'Editing: ' + key;
+  document.getElementById('edit-value-input').value = store[key] || '';
+  document.getElementById('edit-overlay').classList.add('open');
+  document.getElementById('edit-value-input').focus();
+}
+
+function closeEdit() {
+  _editKey = null;
+  document.getElementById('edit-overlay').classList.remove('open');
+}
+
+function confirmEdit() {
+  if (!_editKey) return;
+  const value = document.getElementById('edit-value-input').value.trim();
+  const { oldValue, newValue } = applyMutation('patch', _editKey, value, null, true);
+  notifyFmChange(_editKey, oldValue, newValue, null);
+  closeEdit();
+}
+
+// Close modal on overlay click
+document.getElementById('edit-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeEdit();
+});
+
+// Enter key in add row
+document.getElementById('value-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') uiAdd();
+});
+document.getElementById('edit-value-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') confirmEdit();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Badge
+const badge = document.getElementById('instance-badge');
+badge.textContent = 'instance ' + SHORT_ID;
+badge.style.background = INSTANCE_COLOR + '22';
+badge.style.color = INSTANCE_COLOR;
+
+// Status
+function setStatus(state) {
+  // state: 'ready' | 'synced' | 'pending'
+  const dot   = document.getElementById('status-dot');
+  const label = document.getElementById('status-label');
+  dot.className = 'status-dot ' + state;
+  const labels = { ready: 'ready (no peers)', synced: 'synced', pending: 'waiting for FM…' };
+  label.textContent = labels[state] || state;
+}
+
+setStatus('pending');
+
+// onfmready: filemaker-expected fires once FM injection window has passed.
+// We use it to decide if we are running inside FileMaker or in a plain browser.
+document.addEventListener('filemaker-expected', function(event) {
+  if (!event.filemaker) {
+    setStatus('ready');
+  }
+  // Whether or not FM is present, start the peer sync protocol now.
+  // (onfmready guarantees FileMaker.PerformScript calls are safely queued.)
+  requestSync();
+});
+
+// filemaker-ready fires only when FileMaker actually injected its object.
+document.addEventListener('filemaker-ready', function() {
+  setStatus(Object.keys(peers).length === 0 ? 'ready' : 'synced');
+  // If no peer replied to any request_sync attempt, notify FM with the empty
+  // store. Wait slightly longer than the full retry window (MAX_SYNC_ATTEMPTS
+  // × SYNC_RETRY_MS) so a late peer still gets priority.
+  setTimeout(function() {
+    if (!synced) {
+      notifyFmLoadedOnce();
+    }
+  }, (MAX_SYNC_ATTEMPTS + 1) * SYNC_RETRY_MS);
+});
+
+render();
+setTimeout(requestSync, 0);
+setTimeout(publishState, 100);
+setInterval(publishState, 1000);
+</script>
+</body>
+</html>
