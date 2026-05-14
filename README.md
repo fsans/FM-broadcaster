@@ -1,8 +1,9 @@
 # FM-broadcaster
 
-A **zero-dependency, single-file micro-app** that gives every FileMaker Pro **Web Viewer**
-panel in a shared layout a live, synchronised **key/value store** — with full CRUD access
-from any panel or from FileMaker scripts, instantly, with no server.
+A **zero-dependency micro-app** that gives every FileMaker Pro **Web Viewer**
+panel in the same FileMaker client a live, synchronised **key/value store** — with full
+CRUD access from any panel or from FileMaker scripts, instantly, with no server. State
+optionally persists across panel closes via `localStorage`.
 
 ---
 
@@ -10,23 +11,25 @@ from any panel or from FileMaker scripts, instantly, with no server.
 
 1. [What it does](#what-it-does)
 2. [How it works](#how-it-works)
-3. [Payload / message protocol](#payload--message-protocol)
-4. [Transport layer (BroadcastChannel)](#transport-layer)
-5. [FileMaker integration guide](#filemaker-integration-guide)
+3. [Configuration (URL parameters)](#configuration)
+4. [Persistence (localStorage)](#persistence)
+5. [Payload / message protocol](#payload--message-protocol)
+6. [Transport layer (BroadcastChannel)](#transport-layer)
+7. [FileMaker integration guide](#filemaker-integration-guide)
    - [Loading the micro-app](#loading-the-micro-app)
    - [FileMaker → App (calling JS from FM)](#filemaker--app)
    - [App → FileMaker (the event handler script)](#app--filemaker)
    - [Token-based async correlation](#token-based-async-correlation)
-6. [Running standalone in a browser](#running-standalone-in-a-browser)
-7. [onfmready.js](#onfmreadyjs)
-8. [Known limitations](#known-limitations)
-9. [Roadmap / ideas](#roadmap--ideas)
+8. [Running standalone in a browser](#running-standalone-in-a-browser)
+9. [onfmready.js](#onfmreadyjs)
+10. [Known limitations](#known-limitations)
+11. [Roadmap / ideas](#roadmap--ideas)
 
 ---
 
 ## What it does
 
-When `broadcast.html` is loaded in multiple FileMaker WebViewer panels simultaneously, all
+When `index.html` is loaded in multiple FileMaker WebViewer panels simultaneously, all
 instances share one real-time **key/value store**. Any panel — or a FileMaker script — can:
 
 | Operation | How |
@@ -38,7 +41,16 @@ instances share one real-time **key/value store**. Any panel — or a FileMaker 
 | **Know when a panel loaded** | Same script receives `cmd: "loaded"` with current store snapshot |
 
 All changes propagate to every open WebViewer panel **and** to FileMaker within milliseconds.
-Everything is purely client-side — no server, no database, no network round-trips.
+Everything is purely client-side — no server, no database, no network round-trips. State
+also survives all panels being closed (within the same FileMaker client) thanks to the
+built-in `localStorage` durability layer.
+
+### Typical use case
+
+- One WebViewer per layout, all loading the same `index.html` URL.
+- Switching between layouts always exposes the same shared parameters.
+- Two FileMaker `.fmp12` files opened in the same FileMaker client — both pointing
+  WebViewers at the same hosted URL — share the same store across files.
 
 ---
 
@@ -61,19 +73,21 @@ route point-to-point replies.
 let store = {};   // { [key: string]: string }
 ```
 
-All reads and writes go through `applyMutation(cmd, key, value, token, broadcast)`, which is
-the single source of truth. It mutates `store`, re-renders the UI, optionally broadcasts on
-the channel, and returns `{ oldValue, newValue }`.
+All reads and writes go through `applyMutation(cmd, key, value, token, broadcast, meta)`,
+which is the single source of truth. It mutates `store`, updates `storeMeta` (per-key
+last-writer-wins metadata), re-renders the UI, persists to `localStorage`, optionally
+broadcasts on the channel, and returns `{ oldValue, newValue, changed }`.
 
 ### BroadcastChannel bus
 
 ```js
-const channel = new BroadcastChannel('fm-broadcaster');
+const channel = new BroadcastChannel(CHANNEL_NAME); // default 'fm-broadcaster'
 ```
 
 The `BroadcastChannel` API delivers messages to all browsing contexts that opened a channel
-with the same name **and** share the same origin. In FileMaker, all WebViewers in the same
-`.fmp12` file share an origin, making this work natively.
+with the same name **and** share the same origin. In FileMaker, **all WebViewers in the
+same FileMaker Pro client process** share an origin (for the same hosted URL), even across
+different `.fmp12` files — so the store is shared across files in the same FM client.
 
 ### Late-join sync protocol
 
@@ -90,11 +104,69 @@ New instance              Existing peers
   notifyFmLoaded() ──────────────────> FileMaker
 ```
 
-1. On load, the new instance broadcasts `request_sync`.
-2. Every existing peer replies with a `sync_full` targeted at the new instance's ID.
-3. The new instance accepts the first `sync_full` (they all carry the same state).
-4. After receiving the snapshot (or after a 200 ms timeout if no peers exist), the instance
+1. On load, the new instance broadcasts `request_sync` (retried periodically to handle
+   races where a peer is still initializing).
+2. Every existing peer replies with a `sync_full` targeted at the new instance's ID,
+   carrying both `store` and `meta`.
+3. If the new instance's local store is empty, it accepts the snapshot wholesale
+   (fast path, no per-key meta comparison).
+4. If the new instance already had local state (e.g. from `localStorage`), incoming
+   keys are merged via `storeMeta` last-writer-wins (newer `ts` wins, ties broken by
+   origin id).
+5. After the snapshot (or after the retry window if no peers exist), the instance
    calls `notifyFmLoaded()` to report its state to FileMaker.
+
+---
+
+## Configuration
+
+All runtime knobs live in a single `CONFIG` block near the top of the script, with
+sensible defaults. Each can be overridden per-WebViewer via URL query parameters —
+so the **same hosted file** can power multiple independent clusters in the same FM
+client by using different channel names.
+
+| Constant | URL param | Default | Purpose |
+|----------|-----------|---------|---------|
+| `CHANNEL_NAME` | `channel`     | `fm-broadcaster`              | `BroadcastChannel` namespace. Different value = isolated cluster. |
+| `STORAGE_KEY`  | `storageKey`  | `fm-broadcaster:state`        | `localStorage` key holding `{store, meta}` JSON. |
+| `FM_SCRIPT`    | `fmScript`    | `fm-broadcaster.event_handler`| FileMaker script that receives `loaded`/`onChange` payloads. |
+| `PERSIST`      | `persist`     | `true`                        | When `false`, `localStorage` reads/writes are skipped. |
+
+Boolean params accept `1 / 0 / true / false / yes / no` (case-insensitive).
+
+### Examples
+
+```
+index.html
+index.html?persist=0
+index.html?channel=app-foo&storageKey=app-foo:state
+index.html?fmScript=MyApp.broadcasterHandler
+index.html?channel=app-foo&persist=0&fmScript=MyApp.handler
+```
+
+Use-cases:
+
+- **Different `channel` per app** — keep two independent FileMaker apps from clobbering
+  each other's KV store while running in the same FM client.
+- **`persist=0`** — sandbox / experimentation panel that should not pollute storage.
+- **`fmScript=...`** — route mutations to a different FileMaker handler script per file.
+
+---
+
+## Persistence
+
+When `PERSIST` is true (default), every mutation also writes the full `{store, meta}`
+blob to `localStorage` under `STORAGE_KEY`. On startup, the WebViewer restores from
+`localStorage` **before** starting the peer-sync handshake. This means:
+
+- A freshly opened WebViewer is immediately useful even when no peers are alive.
+- Closing and reopening all WebViewers in the same FM client — or quitting and
+  relaunching FileMaker on the same machine — preserves the store.
+- Two `.fmp12` files in the same FM client, pointing WebViewers at the same URL, share
+  the same persisted blob (same origin = same `localStorage`).
+
+Failure modes (private mode, quota, disabled storage) are caught and silently ignored
+— the app falls back to in-memory only.
 
 ---
 
@@ -160,13 +232,17 @@ FileMaker to correlate which script call produced which change notification.
 
 **Option A — hosted file (recommended)**
 
-Host `broadcast.html` on any static web server accessible to the FileMaker client machine
-(local or remote). Set every Web Viewer object's URL to the same `http://` path so all
-instances share the same origin.
+Host `index.html` (and the sibling `onfmready.js`) on any static web server accessible to
+the FileMaker client machine (local or remote). Set every Web Viewer object's URL to the
+same `http://` path so all instances share the same origin.
 
 ```
-http://localhost:8080/broadcast.html
+http://localhost:8080/index.html
+http://localhost:8080/index.html?channel=my-app
 ```
+
+The URL must match **exactly** across all WebViewers (same scheme, host, port, path) for
+`BroadcastChannel` and `localStorage` to be shared.
 
 **Option B — `data:` URI (single-panel only)**
 
@@ -295,7 +371,7 @@ No build step is needed. Serve from localhost so `BroadcastChannel` gets a prope
 
 ```bash
 python3 -m http.server 8080
-# then open http://localhost:8080/broadcast.html in two or more tabs
+# then open http://localhost:8080/index.html in two or more tabs
 ```
 
 Outside FileMaker, `onfmready.js` detects that `FileMaker` was never injected and logs all
@@ -306,9 +382,12 @@ browser-only development straightforward.
 
 ## onfmready.js
 
-`broadcast.html` vendors **onfmready.js v2.1.11** (MIT — Stephan Casas) inline as the first
-`<script>` block. It intercepts all calls to `FileMaker.PerformScript()` and queues them
-until FileMaker injects its JS object, eliminating race conditions on macOS and WebDirect.
+`index.html` loads **onfmready.js v2.1.11** (MIT — Stephan Casas) as the **first**
+`<script>` tag, served as a sibling file from the same directory. It intercepts all calls
+to `FileMaker.PerformScript()` and queues them until FileMaker injects its JS object,
+eliminating race conditions on macOS and WebDirect.
+
+Deployment must include both files side-by-side at the same URL path.
 
 Key events it provides:
 
@@ -332,20 +411,21 @@ CDN: `https://cdn.jsdelivr.net/npm/onfmready.js@2.1.11/dist/onfmready.min.js`
 
 | Limitation | Detail |
 |-----------|--------|
-| **Same-origin required** | All WebViewers must load from the same origin. `data:` URI instances get isolated origins and cannot communicate. Serve from a static host. |
-| **No persistence** | The store lives in memory. Closing all WebViewers or quitting FileMaker wipes it. Persistence would require `localStorage`, IndexedDB, or writing to a FileMaker field. |
+| **Same-origin required** | All WebViewers must load from the exact same URL (origin + path). `data:` URI instances get isolated origins and cannot communicate. Serve from a static host. |
+| **Same-machine only** | `BroadcastChannel` and `localStorage` are scoped to a single FileMaker Pro process. Sharing across different machines requires an external transport (FM Server, WebSocket relay, etc.). |
 | **String values only** | Values are stored as strings. Structured objects should be JSON-serialised before storing. |
 | **No access control** | Any WebViewer at the same origin/channel name can join and mutate the store. |
-| **Concurrent patch race** | If two panels `patch` the same key simultaneously, the last broadcast write wins. No conflict resolution or CRDT logic is implemented. |
-| **FM script name is hardcoded** | The script `fm-broadcaster.event_handler` must exist and be named exactly. A URL parameter to override this is a planned roadmap item. |
+| **Concurrent patch resolution** | Conflicting writes are resolved by `storeMeta` last-writer-wins (timestamp + origin tiebreaker). Not a full CRDT — simultaneous writes still pick a winner deterministically rather than merging. |
+| **localStorage quota** | Only meaningful for very large stores. Failure to persist (private mode, quota exceeded) is silently ignored; in-memory state still works. |
 
 ---
 
 ## Roadmap / ideas
 
-- [ ] Accept `?channel=` and `?script=` URL parameters to configure channel name and FM script name without editing the file
-- [ ] Optional `localStorage` persistence so state survives a panel reload (not a full FM quit)
+- [x] Accept `?channel=`, `?fmScript=`, `?storageKey=`, `?persist=` URL parameters
+- [x] Optional `localStorage` persistence so state survives panel close / FM relaunch
+- [x] Last-writer-wins metadata for conflict resolution
 - [ ] Heartbeat / presence: detect and remove peers that closed without broadcasting a departure
 - [ ] Structured value support: store arbitrary JSON objects, not just strings
-- [ ] Conflict resolution hint: last-write-wins timestamp attached to each key
 - [ ] `window.fmBroadcaster` public API for external scripts to call `add`, `patch`, `delete`, `getAll`
+- [ ] Optional cross-host transport (FM Server / WebSocket relay) behind a feature flag
