@@ -55,8 +55,13 @@ instances share one real-time **key/value store**. Any panel — or a FileMaker 
 | **Add** a key/value pair | UI input row, or FM `cmd: "add"` |
 | **Patch** (update) a value | UI edit button, or FM `cmd: "patch"` |
 | **Delete** a key | UI delete button, or FM `cmd: "delete"` |
-| **Get notified** on any change | FileMaker script `fm-broadcaster.event_handler` receives `cmd: "onChange"` |
-| **Know when a panel loaded** | Same script receives `cmd: "loaded"` with current store snapshot |
+| **Get** a value by key | FM `cmd: "get"` → receives `onResult` |
+| **List all keys** | FM `cmd: "keys"` → receives `onResult` |
+| **Check if key exists** | FM `cmd: "exists"` → receives `onResult` |
+| **Count keys** | FM `cmd: "count"` → receives `onResult` |
+| **Clear all keys** | FM `cmd: "clear"` → receives `onResult` (broadcasts to peers) |
+| **Get notified** on any change | FileMaker script receives `cmd: "onChange"` |
+| **Know when a panel loaded** | FileMaker script receives `cmd: "loaded"` with store snapshot |
 
 All changes propagate to every open WebViewer panel **and** to FileMaker within milliseconds.
 Everything is purely client-side — no server, no database, no network round-trips. State
@@ -210,11 +215,16 @@ All payloads — both the bus messages and the FileMaker bridge — use the **sa
 
 FileMaker calls JavaScript function `fmCommand` passing a JSON string:
 
-| `cmd` | `data` fields | Description |
-|-------|--------------|-------------|
-| `add` | `key`, `value` | Add (or overwrite) a key |
-| `patch` | `key`, `value` | Update an existing key |
-| `delete` | `key` | Remove a key (`value` can be omitted / null) |
+| `cmd` | `data` fields | Description | Broadcast |
+|-------|--------------|-------------|-----------|
+| `add` | `key`, `value` | Add (or overwrite) a key | Yes |
+| `patch` | `key`, `value` | Update an existing key | Yes |
+| `delete` | `key` | Remove a key | Yes |
+| `get` | `key` | Read value by key | No — local only |
+| `keys` | — | List all keys | No — local only |
+| `exists` | `key` | Check if key exists | No — local only |
+| `count` | — | Get number of keys | No — local only |
+| `clear` | — | Delete all keys | Yes |
 
 ### App → FM commands (`fm-broadcaster.event_handler`)
 
@@ -224,6 +234,8 @@ The app calls `FileMaker.PerformScript("fm-broadcaster.event_handler", payload)`
 |-------|--------------|------------|
 | `loaded` | `instanceId`, `store` | After FM is ready and initial store state is known |
 | `onChange` | `key`, `oldValue`, `newValue` | After **every** store mutation (any origin — local UI, peer panel, or FM command) |
+| `onResult` | varies by query | Response to `get`, `keys`, `exists`, `count`, `clear` commands |
+| `error` | `message` | When a command fails or is malformed |
 
 The `token` from the originating command is preserved in all reply payloads, enabling
 FileMaker to correlate which script call produced which change notification.
@@ -302,6 +314,15 @@ Perform JavaScript in Web Viewer [
 
 // Delete a key
 { "cmd": "delete", "data": { "key": "userName" },                    "token": "…" }
+
+// Query commands (read-only, no broadcast to peers)
+{ "cmd": "get",    "data": { "key": "userName" },                    "token": "…" }
+{ "cmd": "keys",   "data": {},                                       "token": "…" }
+{ "cmd": "exists", "data": { "key": "userName" },                    "token": "…" }
+{ "cmd": "count",  "data": {},                                       "token": "…" }
+
+// Clear all keys (deletes everything, broadcasts to peers)
+{ "cmd": "clear",  "data": {},                                       "token": "…" }
 ```
 
 ---
@@ -329,6 +350,28 @@ Else If [ $cmd = "onChange" ]
   Set Variable [ $newValue ; Value: JSONGetElement($data ; "newValue") ]
   # … react to the change …
 
+Else If [ $cmd = "onResult" ]
+  # Response to a query command (get, keys, exists, count, clear)
+  Set Variable [ $resultData ; Value: JSONGetElement($data ; "keys") ]
+  If [ not IsEmpty($resultData) ]
+    # keys command result
+    Set Variable [ $keys ; Value: $resultData ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "count")) ]
+    # count command result
+    Set Variable [ $count ; Value: JSONGetElement($data ; "count") ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "cleared")) ]
+    # clear command result
+    Set Variable [ $cleared ; Value: JSONGetElement($data ; "cleared") ]
+  Else If [ not IsEmpty(JSONGetElement($data ; "exists")) ]
+    # exists command result
+    Set Variable [ $exists ; Value: JSONGetElement($data ; "exists") ]
+  Else
+    # get command result
+    Set Variable [ $key   ; Value: JSONGetElement($data ; "key") ]
+    Set Variable [ $value ; Value: JSONGetElement($data ; "value") ]
+    Set Variable [ $found ; Value: JSONGetElement($data ; "found") ]
+  End If
+
 End If
 ```
 
@@ -355,6 +398,24 @@ End If
   },
   "token": "the-same-token-FM-sent-in-the-add-command"
 }
+```
+
+**`onResult` payload examples:**
+```json
+// get
+{ "cmd": "onResult", "data": { "key": "userName", "value": "Alice", "found": true }, "token": "…" }
+
+// keys
+{ "cmd": "onResult", "data": { "keys": ["mode", "userName"] }, "token": "…" }
+
+// exists
+{ "cmd": "onResult", "data": { "key": "userName", "exists": true }, "token": "…" }
+
+// count
+{ "cmd": "onResult", "data": { "count": 3 }, "token": "…" }
+
+// clear
+{ "cmd": "onResult", "data": { "cleared": 5 }, "token": "…" }
 ```
 
 ---
@@ -443,6 +504,9 @@ fallback object even outside FM. Use `event.filemaker` from `filemaker-expected`
 
 ## Roadmap / ideas
 
+- [x] Accept `?channel=` and `?script=` URL parameters to configure channel name and FM script name without editing the file
+- [x] Optional `localStorage` persistence so state survives a panel reload (not a full FM quit)
+- [x] Query API for FileMaker: `get`, `keys`, `exists`, `count`, `clear` commands with `onResult` responses
 - [x] Accept `?channel=`, `?fmScript=`, `?storageKey=`, `?persist=` URL parameters
 - [x] Optional `localStorage` persistence so state survives panel close / FM relaunch
 - [x] Last-writer-wins metadata for conflict resolution
