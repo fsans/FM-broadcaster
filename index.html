@@ -237,6 +237,31 @@ let storeMeta = {};
 let peers = {};   // { [instanceId]: color }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PERSISTENCE  — localStorage durability layer (per-origin)
+// Survives "all WebViewers closed" within one FileMaker client and is shared
+// across FM files that load this page from the same URL.
+// ─────────────────────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'fm-broadcaster:state';
+
+function loadPersisted() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.store && typeof parsed.store === 'object') store = parsed.store;
+      if (parsed.meta  && typeof parsed.meta  === 'object') storeMeta = parsed.meta;
+    }
+  } catch (e) { /* localStorage unavailable or corrupt; ignore */ }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ store: store, meta: storeMeta }));
+  } catch (e) { /* quota / disabled; ignore */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BROADCAST CHANNEL
 // ─────────────────────────────────────────────────────────────────────────────
 const CHANNEL_NAME = 'fm-broadcaster';
@@ -398,6 +423,7 @@ function applyMutation(cmd, key, value, token, broadcast, meta) {
   }
 
   render();
+  persist();
 
   if (broadcast) {
     channel.postMessage(mkMsg(cmd, { key, value, meta: mutationMeta, color: INSTANCE_COLOR }, null, token));
@@ -421,6 +447,7 @@ function mergeFullState(data) {
       storeMeta[key] = incomingMeta[key] || nextMeta(false);
     });
     render();
+    persist();
     return true;
   }
 
@@ -686,6 +713,11 @@ function setStatus(state) {
 }
 
 setStatus('pending');
+
+// Restore any state previously persisted by another WebViewer at this origin.
+// This means a freshly-opened WebViewer is immediately useful even if no
+// peers are currently alive (e.g. the user closed all FM windows and reopens).
+loadPersisted();
 
 // onfmready: filemaker-expected fires once FM injection window has passed.
 // We use it to decide if we are running inside FileMaker or in a plain browser.
