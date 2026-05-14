@@ -411,9 +411,6 @@ function mergeFullState(data) {
   const incomingMeta  = (data && data.meta)  || {};
   const incomingKeys  = Object.keys(incomingStore);
 
-  console.log('[mergeFullState before]', SHORT_ID, JSON.parse(JSON.stringify(store)));
-  console.log('[mergeFullState incoming]', SHORT_ID, { keys: incomingKeys, hasMeta: Object.keys(incomingMeta).length > 0 });
-
   // Fast path: if our local store is empty, replace it wholesale.
   // This avoids any meta/freshness comparison preventing the initial fill,
   // which is the case for every late joiner (instance 2, 3, 4, ...).
@@ -424,7 +421,6 @@ function mergeFullState(data) {
       storeMeta[key] = incomingMeta[key] || nextMeta(false);
     });
     render();
-    console.log('[mergeFullState after-replace]', SHORT_ID, JSON.parse(JSON.stringify(store)));
     return true;
   }
 
@@ -443,7 +439,6 @@ function mergeFullState(data) {
   });
 
   if (changed) render();
-  console.log('[mergeFullState after-merge]', SHORT_ID, JSON.parse(JSON.stringify(store)), 'changed=', changed);
   return changed;
 }
 
@@ -572,12 +567,6 @@ channel.onmessage = function(e) {
 
   // Targeted messages: ignore if we're not the target
   if (msg.target && msg.target !== INSTANCE_ID) return;
-
-  console.log('[bus recv]', SHORT_ID, msg.cmd, {
-    origin: msg.origin && msg.origin.slice(-6),
-    target: msg.target && msg.target.slice(-6),
-    storeKeys: msg.data && msg.data.store ? Object.keys(msg.data.store) : null
-  });
 
   switch (msg.cmd) {
     case 'hello': {
