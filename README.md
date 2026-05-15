@@ -11,6 +11,8 @@ panel in the same FileMaker client a live, synchronised **key/value store** — 
 CRUD access from any panel or from FileMaker scripts, instantly, with no server. State
 optionally persists across panel closes via `localStorage`.
 
+> **Quick overview?** For a fast, visual introduction to what FM-broadcaster is and what it can do, read the announcement page: **<https://ntwk.es/resources/fm-broadcaster/announcement.html>**
+
 ---
 
 ## Table of contents
