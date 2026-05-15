@@ -4,8 +4,15 @@
   <meta charset="UTF-8" />
   <title>FM Broadcaster</title>
 
-  <!-- onfmready.js — must be the first script loaded -->
-  <script src="onfmready.js"></script>
+  <!-- onfmready.js v2.1.11 (MIT, by Stephan Casas) — inlined verbatim from the   -->
+  <!-- official minified dist so this file has zero external dependencies.        -->
+  <!-- Source: https://github.com/stephancasas/onfmready.js                        -->
+  <!-- Queues FileMaker.PerformScript calls until FM injects its object, then     -->
+  <!-- flushes them. Fires 'filemaker-ready' and 'filemaker-expected' events on   -->
+  <!-- both window and document. Must remain the first <script> in the document.  -->
+  <script>
+  !function(e){"function"==typeof define&&define.amd?define(e):e()}((function(){"use strict";(()=>{const e=window;let t;if(window.document.documentMode){if("function"!=typeof Object.assign&&Object.defineProperty(Object,"assign",{value:function(e,t){if(null==e)throw new TypeError("Cannot convert undefined or null to object");for(var n=Object(e),o=1;o<arguments.length;o++){var i=arguments[o];if(null!=i)for(var r in i)Object.prototype.hasOwnProperty.call(i,r)&&(n[r]=i[r])}return n},writable:!0,configurable:!0}),"function"!=typeof window.CustomEvent){function e(e,t){t=t||{bubbles:!1,cancelable:!1,detail:void 0};var n=document.createEvent("Event");return n.initEvent(e,t.bubbles,t.cancelable),Object.defineProperty(n,"detail",{value:t.detail}),n}e.prototype=window.Event.prototype,window.CustomEvent=e,window.Event=e}const e="if (window.FileMaker != null)";t={resolver:()=>{try{const n=t.resolver.caller.caller.toString();t.stash=n.indexOf(e)>=0}catch(e){t.stash=!1}},stash:!1}}let n,o=[];const i=()=>{if(!n){const t=new Event("filemaker-ready");e.dispatchEvent(t),document.dispatchEvent(t)}const t=Object.assign(new Event("filemaker-expected"),{filemaker:!n,FileMaker:!n});e.dispatchEvent(t),document.dispatchEvent(t)};if("object"==typeof e.FileMaker)return void setTimeout(i);e.OnFMReady=Object.assign({respondTo:{},noLogging:!1,unmount:!1},e.OnFMReady);const r={PerformScript:(e,t)=>r.PerformScriptWithOption(e,t),PerformScriptWithOption:(e,t,i=0)=>{n?c(e,t,i):o.push([e,t,i])}},c=(t,n,o)=>{const i=e.OnFMReady.respondTo[t];return i?i(n,o):e.OnFMReady.noLogging?null:console.log(Object.assign({script:t,param:n},o?{option:o}:{}))};let a,s,l=r;document.addEventListener("DOMContentLoaded",(()=>{(!t||t&&!t.stash)&&(l=null,s=!0),setTimeout((()=>{setTimeout((()=>{}))}))})),Object.defineProperty(window,"FileMaker",{set(e){l=e,s=!1,clearTimeout(a),null!=e&&setTimeout((()=>{const e=l,t=e?.PerformScriptWithOption||e.PerformScript;o.forEach((e=>{t(...e)})),o=[],i()}))},get:()=>t&&!t.stash&&!s&&(t.resolver(),t.stash)?null:(s&&(t=void 0,a=setTimeout((()=>{n=!0,e.FileMaker=e.OnFMReady.unmount?void 0:r}))),l)})})()}));
+  </script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
