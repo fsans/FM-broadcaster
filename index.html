@@ -14,8 +14,14 @@
     var _queue      = [];   // buffered [script, param, option] calls
     var _real       = null; // the real FileMaker object once FM injects it
     var _fmInjected = false;
+    // _domReady flips true after DOMContentLoaded + two async ticks.
+    // Before that window passes the getter returns null so FM's injector
+    // sees an empty slot and proceeds to inject. After that window, app
+    // code gets the real object or the stub (never null).
+    var _domReady   = false;
+    var _standaloneTimer = null;
 
-    // Stub object returned to app code before FM injects.
+    // Stub object returned to app code while waiting for FM injection.
     // Buffers all PerformScript / PerformScriptWithOption calls.
     var _stub = {
       PerformScript: function (script, param) {
@@ -30,12 +36,15 @@
       }
     };
 
-    function _fireEvents() {
-      // filemaker-ready — only when FM actually injected
-      var ready = new Event('filemaker-ready');
-      document.dispatchEvent(ready);
-      // filemaker-expected — always, with filemaker=true here
+    function _fireInjectedEvents() {
+      var ready    = new Event('filemaker-ready');
       var expected = Object.assign(new Event('filemaker-expected'), { filemaker: true });
+      document.dispatchEvent(ready);
+      document.dispatchEvent(expected);
+    }
+
+    function _fireStandaloneEvent() {
+      var expected = Object.assign(new Event('filemaker-expected'), { filemaker: false });
       document.dispatchEvent(expected);
     }
 
@@ -47,43 +56,36 @@
         _real = obj;
         if (obj == null) return;
         _fmInjected = true;
+        clearTimeout(_standaloneTimer); // cancel the standalone fallback
         // Flush buffered calls through the real object
         var fn = obj.PerformScriptWithOption || obj.PerformScript;
         _queue.forEach(function (args) { fn.apply(obj, args); });
         _queue = [];
-        _fireEvents();
+        _fireInjectedEvents();
       },
 
-      // The getter must return null when FileMaker's own injector probes the
-      // property (it checks "if (window.FileMaker != null)" before injecting).
-      // Returning null here lets the injector proceed; returning the stub would
-      // make FM think it already injected and skip the injection entirely.
+      // KEY BEHAVIOUR: before the DOMContentLoaded window closes, return null
+      // so FileMaker's injector (which checks "if (window.FileMaker != null)")
+      // sees an empty slot and proceeds to inject via the setter above.
+      // Once _domReady is true, return the real object or stub to app code.
       get: function () {
-        try {
-          // Walk up the call stack looking for FM's internal probe string.
-          // This relies on non-strict caller inspection — wrapped in try/catch
-          // so it degrades gracefully if the engine blocks it (CSP / strict).
-          var caller = (new Function('return arguments.callee.caller'))();
-          if (caller) {
-            var src = caller.caller ? caller.caller.toString() : '';
-            if (src.indexOf('if (window.FileMaker != null)') >= 0) {
-              return null; // let FM inject
-            }
-          }
-        } catch (e) { /* caller inspection blocked — safe to ignore */ }
+        if (!_domReady) return null;
         return _real || _stub;
       }
     });
 
-    // After DOMContentLoaded + two async ticks (same timing as onfmready.js):
-    // if FM still hasn't injected, fire filemaker-expected with filemaker=false
-    // so the app can start peer sync in standalone / browser mode.
+    // DOMContentLoaded + two async ticks mirrors the original onfmready.js
+    // timing. After this window: flip _domReady so app code can reach the
+    // stub/real object, then start a short countdown — if FM still hasn't
+    // injected by then, fire standalone fallback.
     document.addEventListener('DOMContentLoaded', function () {
       setTimeout(function () {
         setTimeout(function () {
+          _domReady = true;
           if (!_fmInjected) {
-            var expected = Object.assign(new Event('filemaker-expected'), { filemaker: false });
-            document.dispatchEvent(expected);
+            // Give FM a little extra grace time beyond the detection window
+            // before declaring standalone mode (matches onfmready behaviour).
+            _standaloneTimer = setTimeout(_fireStandaloneEvent, 0);
           }
         });
       });
