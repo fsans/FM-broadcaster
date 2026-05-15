@@ -268,7 +268,7 @@ function paramBool(name, fallback) {
 const CHANNEL_NAME = paramStr ('channel',    'fm-broadcaster');
 const STORAGE_KEY  = paramStr ('storageKey', 'fm-broadcaster:state');
 const FM_SCRIPT    = paramStr ('fmScript',   'fm-broadcaster.event_handler');
-const PERSIST      = paramBool('persist',    true);
+const PERSIST      = paramBool('persist',    false);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE  — key/value store  { [key: string]: string }
@@ -279,8 +279,8 @@ let peers = {};   // { [instanceId]: color }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PERSISTENCE  — localStorage durability layer (per-origin)
-// Enabled by default. Disable by setting PERSIST=false (above) or via URL
-// (?persist=0). When disabled, loadPersisted() and persist() are no-ops.
+// Diabled by default. Enable by setting PERSIST=true (above) or via URL
+// (?persist=1). When disabled, loadPersisted() and persist() are no-ops.
 // ─────────────────────────────────────────────────────────────────────────────
 function loadPersisted() {
   if (!PERSIST) return;
