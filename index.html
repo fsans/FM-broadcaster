@@ -4,8 +4,93 @@
   <meta charset="UTF-8" />
   <title>FM Broadcaster</title>
 
-  <!-- onfmready.js — must be the first script loaded -->
-  <script src="onfmready.js"></script>
+  <!-- onfmready — inlined replacement for onfmready.js (no external dependency) -->
+  <!-- Queues FileMaker.PerformScript calls until FM injects its object, then  -->
+  <!-- flushes them. Fires 'filemaker-ready' and 'filemaker-expected' events.  -->
+  <script>
+  (function () {
+    'use strict';
+
+    var _queue      = [];   // buffered [script, param, option] calls
+    var _real       = null; // the real FileMaker object once FM injects it
+    var _fmInjected = false;
+
+    // Stub object returned to app code before FM injects.
+    // Buffers all PerformScript / PerformScriptWithOption calls.
+    var _stub = {
+      PerformScript: function (script, param) {
+        _stub.PerformScriptWithOption(script, param, 0);
+      },
+      PerformScriptWithOption: function (script, param, option) {
+        if (_real) {
+          (_real.PerformScriptWithOption || _real.PerformScript).call(_real, script, param, option || 0);
+        } else {
+          _queue.push([script, param, option || 0]);
+        }
+      }
+    };
+
+    function _fireEvents() {
+      // filemaker-ready — only when FM actually injected
+      var ready = new Event('filemaker-ready');
+      document.dispatchEvent(ready);
+      // filemaker-expected — always, with filemaker=true here
+      var expected = Object.assign(new Event('filemaker-expected'), { filemaker: true });
+      document.dispatchEvent(expected);
+    }
+
+    Object.defineProperty(window, 'FileMaker', {
+      configurable: true,
+
+      // FM calls this setter when it injects its object into the page.
+      set: function (obj) {
+        _real = obj;
+        if (obj == null) return;
+        _fmInjected = true;
+        // Flush buffered calls through the real object
+        var fn = obj.PerformScriptWithOption || obj.PerformScript;
+        _queue.forEach(function (args) { fn.apply(obj, args); });
+        _queue = [];
+        _fireEvents();
+      },
+
+      // The getter must return null when FileMaker's own injector probes the
+      // property (it checks "if (window.FileMaker != null)" before injecting).
+      // Returning null here lets the injector proceed; returning the stub would
+      // make FM think it already injected and skip the injection entirely.
+      get: function () {
+        try {
+          // Walk up the call stack looking for FM's internal probe string.
+          // This relies on non-strict caller inspection — wrapped in try/catch
+          // so it degrades gracefully if the engine blocks it (CSP / strict).
+          var caller = (new Function('return arguments.callee.caller'))();
+          if (caller) {
+            var src = caller.caller ? caller.caller.toString() : '';
+            if (src.indexOf('if (window.FileMaker != null)') >= 0) {
+              return null; // let FM inject
+            }
+          }
+        } catch (e) { /* caller inspection blocked — safe to ignore */ }
+        return _real || _stub;
+      }
+    });
+
+    // After DOMContentLoaded + two async ticks (same timing as onfmready.js):
+    // if FM still hasn't injected, fire filemaker-expected with filemaker=false
+    // so the app can start peer sync in standalone / browser mode.
+    document.addEventListener('DOMContentLoaded', function () {
+      setTimeout(function () {
+        setTimeout(function () {
+          if (!_fmInjected) {
+            var expected = Object.assign(new Event('filemaker-expected'), { filemaker: false });
+            document.dispatchEvent(expected);
+          }
+        });
+      });
+    });
+
+  })();
+  </script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
