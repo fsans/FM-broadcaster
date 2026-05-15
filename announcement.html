@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Introducing FM-broadcaster — A Real-Time Shared State Bus for FileMaker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #f4f6f9;
+    color: #1a2332;
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 32px 80px;
+  }
+  .kicker {
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #005577;
+    margin-bottom: 12px;
+  }
+  .kicker::before {
+    content: "● ";
+    color: #c0392b;
+  }
+  figure {
+    margin: 32px 0;
+    background: #ffffff;
+    border: 1px solid #e1e7ee;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+  }
+  figure img, figure svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+  figcaption {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #7a8693;
+    font-style: italic;
+  }
+  .schema {
+    background: #ffffff;
+    border: 1px solid #e1e7ee;
+    border-radius: 6px;
+    padding: 24px;
+    margin: 32px 0;
+  }
+  h3.section {
+    font-size: 18px;
+    color: #0a1628;
+    margin: 36px 0 8px;
+  }
+  p.body {
+    font-size: 15px;
+    margin: 0 0 16px;
+    color: #2c3e50;
+  }
+  ul.plain {
+    font-size: 15px;
+    color: #2c3e50;
+    padding-left: 22px;
+    margin: 0 0 16px;
+  }
+  ul.plain li { margin-bottom: 6px; }
+  code {
+    background: #e8edf2;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    color: #1a2332;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 {
+    font-size: 38px;
+    line-height: 1.15;
+    margin: 0 0 18px;
+    letter-spacing: -0.5px;
+    color: #0a1628;
+  }
+  .deck {
+    font-size: 19px;
+    color: #4a5868;
+    font-weight: 300;
+    margin: 0 0 32px;
+    border-bottom: 1px solid #d8dfe6;
+    padding-bottom: 28px;
+  }
+  .meta {
+    font-size: 13px;
+    color: #7a8693;
+    margin-bottom: 40px;
+    font-style: italic;
+  }
+  .lede {
+    font-size: 17px;
+    margin-bottom: 24px;
+  }
+  .lede strong {
+    color: #005577;
+  }
+  .pullquote {
+    border-left: 4px solid #005577;
+    background: #ffffff;
+    padding: 20px 28px;
+    margin: 36px 0;
+    font-size: 17px;
+    font-style: italic;
+    color: #2c3e50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  h2 {
+    font-size: 26px;
+    margin: 56px 0 8px;
+    color: #0a1628;
+    border-bottom: 2px solid #005577;
+    padding-bottom: 8px;
+    display: inline-block;
+  }
+  .sub {
+    color: #7a8693;
+    font-size: 14px;
+    margin: 0 0 28px;
+    font-style: italic;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .card {
+    background: #ffffff;
+    border: 1px solid #e1e7ee;
+    border-radius: 6px;
+    padding: 20px 22px;
+    position: relative;
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+  .card:hover {
+    box-shadow: 0 4px 16px rgba(0, 85, 119, 0.10);
+    transform: translateY(-1px);
+  }
+  .card .num {
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #c0392b;
+    letter-spacing: 1px;
+  }
+  .card h3 {
+    font-size: 16px;
+    margin: 0 0 8px;
+    color: #005577;
+    padding-right: 28px;
+  }
+  .card p {
+    font-size: 14px;
+    margin: 0;
+    color: #3c4858;
+    line-height: 1.55;
+  }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid #d8dfe6;
+    font-size: 13px;
+    color: #7a8693;
+    text-align: center;
+  }
+  footer code {
+    background: #e8edf2;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #1a2332;
+  }
+  .badges {
+    margin: 20px 0 0;
+  }
+  .badge {
+    display: inline-block;
+    background: #005577;
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    margin-right: 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .badge.alt { background: #c0392b; }
+  .badge.neutral { background: #4a5868; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Heads-up &nbsp;·&nbsp; FMWarriors exclusive</div>
+
+  <h1>FM-broadcaster: a tiny shared state bus for FileMaker Web Viewers</h1>
+
+  <p class="deck">
+    Just wanted to show you something I've been playing with. It's a single HTML file that
+    turns every Web Viewer in your FileMaker client into a node on a live, shared key/value
+    store — so any layout, window, or even a different <code>.fmp12</code> can read, write,
+    and react to the same data in real time. No server, no schema, no polling.
+  </p>
+
+  <div class="badges">
+    <span class="badge">Single File</span>
+    <span class="badge alt">Real-Time</span>
+    <span class="badge neutral">Zero Dependencies</span>
+    <span class="badge neutral">MIT</span>
+  </div>
+
+  <p class="meta">An experimental tool I'd like your feedback on &nbsp;·&nbsp; FileMaker Pro 19+</p>
+
+  <h3 class="section">What it actually is</h3>
+
+  <p class="body">
+    FM-broadcaster is one HTML file (<code>index.html</code>) that you host anywhere — local
+    web server, intranet, S3, whatever serves HTTP. You point your Web Viewers at that URL.
+    From that moment on, every Web Viewer instance running in the same FileMaker client
+    process automatically discovers its siblings and joins a shared in-memory key/value
+    store. State propagates between Web Viewers in milliseconds, and FileMaker scripts can
+    read, write, query, or be notified of changes through a small JSON message protocol.
+  </p>
+
+  <p class="body">
+    Under the hood it uses two native browser primitives — <code>BroadcastChannel</code> for
+    instant peer-to-peer messaging, and <code>localStorage</code> for durability across panel
+    closes. Both are origin-scoped to the FileMaker client process, which is exactly the
+    boundary we want: state is shared inside your machine's FileMaker session and nowhere
+    else.
+  </p>
+
+  <h3 class="section">How the pieces fit together</h3>
+
+  <div class="schema">
+    <svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; font-family: -apple-system, Helvetica, sans-serif;">
+      <!-- FileMaker client boundary -->
+      <rect x="10" y="10" width="800" height="340" rx="10" fill="#f4f6f9" stroke="#005577" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="24" y="32" font-size="12" font-weight="700" fill="#005577" letter-spacing="1.5">FILEMAKER PRO CLIENT (one machine, one process)</text>
+
+      <!-- FMP files row -->
+      <rect x="30" y="50" width="360" height="130" rx="6" fill="#ffffff" stroke="#c0392b" stroke-width="1.5"/>
+      <text x="44" y="70" font-size="11" font-weight="700" fill="#c0392b" letter-spacing="1">FILE A.fmp12</text>
+      <rect x="50" y="84" width="140" height="80" rx="4" fill="#eaf3f8" stroke="#005577"/>
+      <text x="120" y="115" font-size="12" text-anchor="middle" fill="#0a1628" font-weight="600">Layout 1</text>
+      <text x="120" y="135" font-size="10" text-anchor="middle" fill="#4a5868">Web Viewer</text>
+      <text x="120" y="150" font-size="9" text-anchor="middle" fill="#7a8693">instance c485a2</text>
+      <rect x="210" y="84" width="160" height="80" rx="4" fill="#eaf3f8" stroke="#005577"/>
+      <text x="290" y="115" font-size="12" text-anchor="middle" fill="#0a1628" font-weight="600">Layout 2</text>
+      <text x="290" y="135" font-size="10" text-anchor="middle" fill="#4a5868">Web Viewer</text>
+      <text x="290" y="150" font-size="9" text-anchor="middle" fill="#7a8693">instance 1373ae</text>
+
+      <rect x="430" y="50" width="360" height="130" rx="6" fill="#ffffff" stroke="#c0392b" stroke-width="1.5"/>
+      <text x="444" y="70" font-size="11" font-weight="700" fill="#c0392b" letter-spacing="1">FILE B.fmp12</text>
+      <rect x="450" y="84" width="160" height="80" rx="4" fill="#eaf3f8" stroke="#005577"/>
+      <text x="530" y="115" font-size="12" text-anchor="middle" fill="#0a1628" font-weight="600">Dashboard</text>
+      <text x="530" y="135" font-size="10" text-anchor="middle" fill="#4a5868">Web Viewer</text>
+      <text x="530" y="150" font-size="9" text-anchor="middle" fill="#7a8693">instance 1b7341</text>
+      <rect x="630" y="84" width="140" height="80" rx="4" fill="#eaf3f8" stroke="#005577"/>
+      <text x="700" y="115" font-size="12" text-anchor="middle" fill="#0a1628" font-weight="600">Popover</text>
+      <text x="700" y="135" font-size="10" text-anchor="middle" fill="#4a5868">Web Viewer</text>
+      <text x="700" y="150" font-size="9" text-anchor="middle" fill="#7a8693">instance 9ae012</text>
+
+      <!-- BroadcastChannel bar -->
+      <rect x="30" y="210" width="760" height="40" rx="6" fill="#005577"/>
+      <text x="410" y="235" font-size="14" font-weight="700" text-anchor="middle" fill="#ffffff" letter-spacing="0.5">BroadcastChannel "fm-broadcaster"  —  real-time pub/sub between instances</text>
+
+      <!-- Connectors -->
+      <line x1="120" y1="164" x2="120" y2="210" stroke="#005577" stroke-width="1.5"/>
+      <line x1="290" y1="164" x2="290" y2="210" stroke="#005577" stroke-width="1.5"/>
+      <line x1="530" y1="164" x2="530" y2="210" stroke="#005577" stroke-width="1.5"/>
+      <line x1="700" y1="164" x2="700" y2="210" stroke="#005577" stroke-width="1.5"/>
+
+      <!-- localStorage -->
+      <rect x="30" y="280" width="360" height="50" rx="6" fill="#fff4e6" stroke="#e08e0b"/>
+      <text x="210" y="302" font-size="13" font-weight="700" text-anchor="middle" fill="#a86200">localStorage  (persistence)</text>
+      <text x="210" y="318" font-size="10" text-anchor="middle" fill="#7a5400">survives panel closes &amp; FM restarts</text>
+
+      <!-- FileMaker scripts -->
+      <rect x="430" y="280" width="360" height="50" rx="6" fill="#fde8e8" stroke="#c0392b"/>
+      <text x="610" y="302" font-size="13" font-weight="700" text-anchor="middle" fill="#8b1e1e">FileMaker Scripts</text>
+      <text x="610" y="318" font-size="10" text-anchor="middle" fill="#7a2828">fmCommand() in  ·  onChange / onResult out</text>
+
+      <!-- Connectors to bottom -->
+      <line x1="210" y1="250" x2="210" y2="280" stroke="#e08e0b" stroke-width="1.5"/>
+      <line x1="610" y1="250" x2="610" y2="280" stroke="#c0392b" stroke-width="1.5"/>
+    </svg>
+  </div>
+
+  <p class="body">
+    Each Web Viewer that loads <code>index.html</code> gets a unique instance ID and joins the
+    channel. Mutations from any instance (or from FileMaker via <code>Perform JavaScript in
+    Web Viewer</code>) flow through a single <code>applyMutation</code> function that updates
+    the store, persists it, broadcasts it, and notifies FileMaker via
+    <code>FileMaker.PerformScript</code>. A two-message handshake (<code>request_sync</code> →
+    <code>sync_full</code>) lets late-joining panels pick up the current state from existing
+    peers.
+  </p>
+
+  <h3 class="section">What it looks like in practice</h3>
+
+  <figure>
+    <img src="sample.png" alt="Two FM-broadcaster Web Viewer windows running side by side, showing the same key/value store synchronized in real time, with the JSON onChange payload visible at the bottom of each window.">
+    <figcaption>
+      Two Web Viewers in the same FileMaker client. Adding <code>from_date</code> in the
+      left window appears instantly in the right one, and FileMaker receives the
+      <code>onChange</code> payload (bottom panel) on both sides — same token, same data.
+    </figcaption>
+  </figure>
+
+  <h3 class="section">What you can do with it (from FileMaker)</h3>
+
+  <ul class="plain">
+    <li><strong>Write</strong>: <code>add</code>, <code>patch</code>, <code>delete</code>, <code>clear</code></li>
+    <li><strong>Read</strong>: <code>get</code>, <code>keys</code>, <code>exists</code>, <code>count</code> — all reply with an <code>onResult</code> payload</li>
+    <li><strong>Subscribe</strong>: every mutation, from anywhere, fires <code>onChange</code> into your handler script with <code>{key, oldValue, newValue, token}</code></li>
+    <li><strong>Correlate</strong>: pass a UUID <code>token</code> on the way in, get it back on the way out — proper async request/response from a FileMaker script</li>
+  </ul>
+
+  <div class="pullquote">
+    The short version: <strong>Web Viewers natively cannot talk to each other, and
+    FileMaker layouts natively cannot push events to each other.</strong> This single
+    HTML file makes both trivial. Anywhere your solution has more than one window open,
+    more than one Web Viewer, or more than one <code>.fmp12</code> in the same client,
+    FM-broadcaster unlocks UX patterns — live selection sync, observable globals,
+    async-with-token, cross-Web-Viewer talk, instant notifications — that are otherwise
+    either impossible or require heavyweight server-backed contortions.
+  </div>
+
+  <h2>16 things you could actually do with it</h2>
+  <p class="sub">From quick wins to small architectural shifts. Some are obvious, some are not — would love your take on which feel useful in your solutions.</p>
+
+  <div class="grid">
+
+    <div class="card">
+      <span class="num">01</span>
+      <h3>Cross-window &amp; cross-file UI state sync</h3>
+      <p>Open three windows of the same solution, or two different <code>.fmp12</code> files —
+      selecting a customer in one highlights the same record everywhere. Currently impossible
+      without server round-trips or external scripting.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">02</span>
+      <h3>Real-time messaging without OnTimer polling</h3>
+      <p>Replace <code>Install OnTimer Script</code> patterns — which burn CPU and feel laggy —
+      with event-driven push. A layout subscribes to a key; when any other layout writes it,
+      FileMaker receives <code>onChange</code> immediately.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">03</span>
+      <h3>Shared session context across files</h3>
+      <p>Currently logged-in user, tenant, environment flag, demo mode, current project —
+      write once in a launcher file, every Web Viewer in every opened file sees it.
+      Survives layout switches via <code>localStorage</code>.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">04</span>
+      <h3>Wizard &amp; multi-step flow state</h3>
+      <p>A long wizard split across multiple layouts or cards keeps its state in the
+      broadcaster instead of a globals table or a passed parameter chain. Back/forward
+      navigation, popovers, and modal dialogs all read and write the same store transparently.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">05</span>
+      <h3>Cross-window selection &amp; focus tracking</h3>
+      <p>Master/detail across windows: a list window in one place, a detail window in another —
+      selecting in the master pushes the selected ID to every detail window via a single key.
+      No External Data Source calls, no record locking.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">06</span>
+      <h3>Lightweight cache for expensive computations</h3>
+      <p>Cache server-side script results — permission matrices, complex JSON aggregates —
+      keyed by user or role. Subsequent layouts read from the broadcaster instead of
+      re-running the script. The default <code>persist=true</code> makes the cache survive
+      layout closes.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">07</span>
+      <h3>Inter-Web-Viewer messaging on the same layout</h3>
+      <p>If you have two Web Viewers on a single layout — say, a chart and a control panel —
+      they can talk to each other directly without round-tripping through FileMaker scripts.
+      <strong>This is currently nearly impossible:</strong> Web Viewers cannot natively
+      communicate.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">08</span>
+      <h3>UI notifications &amp; toast bus</h3>
+      <p>Any script anywhere in the solution writes to a <code>notifications</code> key;
+      a single notification Web Viewer in a status-bar layout displays them. One line of
+      FileMaker code replaces an entire custom notification subsystem.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">09</span>
+      <h3>Async correlation via tokens</h3>
+      <p>The token pattern (UUID flows through <code>add</code> → <code>onChange</code>)
+      lets FileMaker scripts behave as if calling a synchronous API with a callback.
+      Native FileMaker has no clean idiom for this — usually faked with global variables
+      and Pause/Resume.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">10</span>
+      <h3>A poor-man's shared dictionary</h3>
+      <p>The query API — <code>get</code>, <code>keys</code>, <code>exists</code>,
+      <code>count</code>, <code>clear</code> — gives FileMaker an in-memory dictionary
+      that requires no table, no schema pollution, and no
+      <code>JSONSetElement</code>/<code>JSONGetElement</code> gymnastics for every lookup.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">11</span>
+      <h3>Cross-file plugin-style architecture</h3>
+      <p>A "core services" file exposes business logic via broadcaster keys —
+      <code>currentUserRole</code>, <code>featureFlags.betaUi</code>. Add-on
+      <code>.fmp12</code> files just read those keys. Decouples solutions in ways
+      External Data Sources cannot.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">12</span>
+      <h3>Multi-monitor &amp; floating window dashboards</h3>
+      <p>One window holds a KPI dashboard, others hold edit forms. Saves in any form push
+      the new value to the dashboard window in real time — with no <code>Refresh Window</code>
+      calls or timer-driven re-queries.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">13</span>
+      <h3>Live presence indicator</h3>
+      <p>The peers registry already tracks live instances and their colors. Trivial to
+      expose to FileMaker as "X windows currently open" or "user is editing in another
+      window" indicators.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">14</span>
+      <h3>Channel-isolated test &amp; demo modes</h3>
+      <p>Append <code>?channel=demo</code> to let a training file run alongside production
+      data in the same FileMaker client, with no state bleed. Native FileMaker has no such
+      isolation primitive for in-memory state.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">15</span>
+      <h3>Form-level autosave drafts &amp; undo buffer</h3>
+      <p>Rapid keystroke-level autosave to <code>localStorage</code> via
+      <code>persist=true</code>, totally outside FileMaker's record commit cycle.
+      Recover work after a crash without polluting the schema with draft tables.</p>
+    </div>
+
+    <div class="card">
+      <span class="num">16</span>
+      <h3>Replacing global-variable contention</h3>
+      <p>Global variables (<code>$$x</code>) appear shared but are per-window in subtle
+      ways and don't notify on change. The broadcaster gives you <strong>observable
+      globals</strong> with a built-in change event — something FileMaker has never
+      offered.</p>
+    </div>
+
+  </div>
+
+  <footer>
+    FM-broadcaster &nbsp;·&nbsp; single-file <code>index.html</code> &nbsp;·&nbsp; MIT
+    <br>
+    Drop the file behind any HTTP origin, point your Web Viewers at the URL, and have a play.
+    Feedback very welcome.
+  </footer>
+
+</div>
+</body>
+</html>

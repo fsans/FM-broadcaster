@@ -198,6 +198,18 @@ Same envelope plus `origin` (sender INSTANCE_ID) and optional `target` (recipien
 
 ---
 
+## Versioning
+
+- Version is tracked in **two places** that must stay in sync:
+  1. `VERSION` file at repo root (single line, e.g. `0.1.27`)
+  2. `FM_BROADCASTER_VERSION` constant near the top of the main `<script>` block in `index.html`
+- The version format is `MAJOR.MINOR.BUILD`.
+- **After every commit, bump the BUILD number** (the third digit) and update both references in the same commit.
+- **Do NOT increase MAJOR or MINOR versions unless explicitly instructed by the user.** Only the BUILD number changes automatically.
+- The constant is logged to the console on load (`FM-broadcaster vX.Y.Z loaded`) — verify the message reflects the new value before committing.
+
+---
+
 ## Commit style
 
 - Imperative mood, present tense (`Add`, `Fix`, `Refactor`).
