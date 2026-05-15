@@ -519,7 +519,7 @@ fallback object even outside FM. Use `event.filemaker` from `filemaker-expected`
 
 ## Credits
 
-**Created by** [Francesc Sans](mailto:air.fsans@gmail.com)
+**Created by** [Francesc Sans](mailto:tecnic at ntwk.es)
 
 **FM-broadcaster** is released under the [MIT License](LICENSE).
 
